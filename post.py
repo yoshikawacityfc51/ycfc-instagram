@@ -15,8 +15,9 @@ def main():
     with open(f"posts/{post_id}.json", encoding="utf-8") as f:
         post = json.load(f)
 
-    caption = post["caption"]
+    caption = post.get("caption", "")
     files = post["media"]
+    is_story = post.get("type") == "story"
     if not files:
         sys.exit("media が空です")
     if len(files) > 10:
@@ -31,7 +32,18 @@ def main():
     print(f"投稿先: @{me['username']}")
 
     # 2) メディアコンテナ作成
-    if len(files) == 1:
+    if is_story:
+        # ストーリー：1投稿につき画像か動画1つ（キャプションは付けられない）
+        if len(files) != 1:
+            sys.exit("ストーリーは1投稿につき1ファイルです")
+        name = files[0]
+        if is_video(name):
+            c = api("POST", f"{ig}/media", media_type="STORIES", video_url=media_url(name))
+        else:
+            c = api("POST", f"{ig}/media", media_type="STORIES", image_url=media_url(name))
+        creation_id = c["id"]
+        wait_ready(creation_id)
+    elif len(files) == 1:
         name = files[0]
         if is_video(name):
             c = api("POST", f"{ig}/media", media_type="REELS",
@@ -61,7 +73,7 @@ def main():
     pub = api("POST", f"{ig}/media_publish", creation_id=creation_id)
     media_id = pub["id"]
     info = api("GET", media_id, fields="permalink")
-    permalink = info.get("permalink", "")
+    permalink = info.get("permalink", "") or f"https://www.instagram.com/stories/{EXPECTED_USERNAME}/"
     print(f"投稿しました: {permalink}")
 
     # 結果を記録（ワークフローがコミットする）
