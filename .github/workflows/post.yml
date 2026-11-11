@@ -1,0 +1,50 @@
+name: Instagramに投稿
+
+# Claude がプレビューを見せて確認をもらったあとにだけ実行する（手動起動のみ）
+on:
+  workflow_dispatch:
+    inputs:
+      post_id:
+        description: "投稿ID（posts/<投稿ID>.json）"
+        required: true
+      confirm:
+        description: "確認済みなら yes"
+        required: true
+        default: "no"
+
+concurrency:
+  group: instagram-post
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.confirm == 'yes' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 投稿
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          MEDIA_BASE_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/
+        run: python3 post.py "${{ inputs.post_id }}"
+
+      - name: 投稿済みメディアを片付けて記録を保存
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          p = json.load(open("posts/${{ inputs.post_id }}.json", encoding="utf-8"))
+          for name in p["media"]:
+              path = os.path.join("media", name)
+              if os.path.exists(path):
+                  os.remove(path)
+          EOF
+          git config user.name "ycfc-bot"
+          git config user.email "ycfc-bot@users.noreply.github.com"
+          git add -A posts media
+          git commit -m "posted: ${{ inputs.post_id }}" || true
+          git push
